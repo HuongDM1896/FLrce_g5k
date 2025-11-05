@@ -52,9 +52,11 @@ class fedcom_strategy(fl.server.strategy.FedAvg):
         clients = client_manager.sample(num_clients=sample_size, min_num_clients=min_num_clients)
         config_fit_list = []
         for client in clients:
-            cid = int(client.cid)
+            # cid = int(client.cid)
+            cid = client.cid
             config = {}
-            config['Residual'] = self.local_residuals[cid]
+            # config['Residual'] = self.local_residuals[cid]
+            config['Residual'] = self.local_residuals.get(cid)  # dùng get cho client mới
             sub_parameters = get_filters(self.global_model)
             fit_ins = FitIns(ndarrays_to_parameters(sub_parameters), config)
             config_fit_list.append((client, fit_ins))
@@ -74,8 +76,10 @@ class fedcom_strategy(fl.server.strategy.FedAvg):
         cid = client.cid
         param, num = parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples
         Fit_res.append((param, 1))
-        self.local_residuals[int(cid)] = fit_res.metrics["Residual"]
-        self.local_models[int(cid)] = fit_res.metrics["personal model"]
+        self.local_residuals[cid] = fit_res.metrics["Residual"]
+        self.local_models[cid] = fit_res.metrics["personal model"]
+        # self.local_residuals[int(cid)] = fit_res.metrics["Residual"]
+        # self.local_models[int(cid)] = fit_res.metrics["personal model"]
       aggregated_updates = aggregate(Fit_res)
       current_global_model = get_filters(self.global_model)
       self.latest_local_update = top_k_sparsification(self.droprate, aggregated_updates)
@@ -99,6 +103,7 @@ class fedcom_strategy(fl.server.strategy.FedAvg):
         config_evaluate_list = []
         parameters = get_filters(self.global_model)
         for client in clients:
+            cid = client.cid
             config = {}
             #parameters = self.personal_models[int(client.cid)]
             fit_ins = FitIns(ndarrays_to_parameters(parameters), config)

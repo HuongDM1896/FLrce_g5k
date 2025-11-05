@@ -192,11 +192,12 @@ def get_joint(w1: List[np.ndarray], w2: List[np.ndarray]):
         return np.zeros(1), np.zeros(1)
     return np.array(j1), np.array(j2)
 
-def get_relationship_update_this_round(results, map1, map2) -> float:
+def get_relationship_update_this_round(results, map1, map2, client2index) -> float:
     total = 0
     for client, _ in results:
-        cid = int(client.cid)
-        m1, m2  = map1[cid], map2[cid]
+        # cid = int(client.cid)
+        idx = client2index[client.cid]
+        m1, m2  = map1[idx], map2[idx]
         assert(len(m1) == len(m2))
         for i in range(len(m1)):
             if m1[i] != m2[i] and m1[i] == 1:
@@ -205,12 +206,14 @@ def get_relationship_update_this_round(results, map1, map2) -> float:
                 total += 1
     return total
                 
-def highest_consensus_this_round(results, map1, map2):
+def highest_consensus_this_round(results, map1, map2, client2index):
     value = -99999
     for client, _ in results:
         total = 0
-        cid = int(client.cid)
-        m1, m2  = map1[cid], map2[cid]
+        # cid = int(client.cid)
+        # m1, m2  = map1[cid], map2[cid]
+        idx = client2index[client.cid]
+        m1, m2  = map1[idx], map2[idx]
         assert(len(m1) == len(m2))
         for i in range(len(m1)):
             if m1[i] != m2[i] and m1[i] == 1:

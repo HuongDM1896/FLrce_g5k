@@ -43,7 +43,7 @@ class fedprox_strategy(fl.server.strategy.FedAvg):
         clients = client_manager.sample(num_clients=sample_size, min_num_clients=min_num_clients)
         config_fit_list = []
         for client in clients:
-            cid = int(client.cid)
+            # cid = int(client.cid)
             config = {}
             sub_parameters = get_filters(self.global_model)
             fit_ins = FitIns(ndarrays_to_parameters(sub_parameters), config)
@@ -61,7 +61,7 @@ class fedprox_strategy(fl.server.strategy.FedAvg):
       # Convert results
       Fit_res = []
       for client, fit_res in results:
-        cid = client.cid
+        # cid = client.cid
         param, num = parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples
         Fit_res.append((param, num))
       #for params, size, rate in weights_results:

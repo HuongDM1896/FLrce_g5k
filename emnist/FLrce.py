@@ -61,6 +61,8 @@ class FLrce_strategy(fl.server.strategy.FedAvg):
         self.relation_map_saving = []
         self.earlystopping_round_2 = 999
         self.non_filter_params = {}
+        self.client2index = {}
+        self.num_clients = 0
 
     """override"""
     def initialize_parameters(self, client_manager: ClientManager):
@@ -89,7 +91,7 @@ class FLrce_strategy(fl.server.strategy.FedAvg):
         self.is_exploit_round = if_exploit
         clients = client_manager.sample(num_clients=sample_size, exploit_factor=if_exploit, utility_scores_map=scoremap, explore_map=exploremap, min_num_clients=min_num_clients)
         for client in clients:
-            cid = int(client.cid)
+            # cid = int(client.cid)
             config = {}
             parameters = get_filters(self.global_model)
             fit_ins = FitIns(ndarrays_to_parameters(parameters), config)
@@ -142,8 +144,8 @@ class FLrce_strategy(fl.server.strategy.FedAvg):
         for client_id, received_parameter in [(client.cid, parameters_to_ndarrays(fit_res.parameters)) for (client, fit_res) in results]:
             self.update_current_relationship(client_id, received_parameter, results)
         self.save_relationship()
-        consensus_update = get_relationship_update_this_round(results, oldmap, self.consesus)
-        hc = highest_consensus_this_round(results, oldmap, self.consesus)
+        consensus_update = get_relationship_update_this_round(results, oldmap, self.consesus, self.client2index)
+        hc = highest_consensus_this_round(results, oldmap, self.consesus, self.client2index)
         self.record_selected_clients(selected_clients)
         self.record_avg_consensus(consensus_update)
         self.record_hcp(hc)
@@ -254,8 +256,8 @@ class FLrce_strategy(fl.server.strategy.FedAvg):
 
     def record_hcp(self, cp):
         self.hcp.append(cp)
-
-    def update_relationship(self, id:str, new_parameter:List[np.ndarray], server_round, uDict=None, Alpha=0.9, Decay_factor=DECAY_FACTOR):
+        
+    def update_relationship( self, id: str, new_parameter: List[np.ndarray], server_round, uDict=None, Alpha=0.9, Decay_factor=DECAY_FACTOR):
         current_global_parameter = get_filters(self.global_model)
         new_parameter_merged = new_parameter
         this_update = compute_update(new_parameter_merged, current_global_parameter)
@@ -268,18 +270,55 @@ class FLrce_strategy(fl.server.strategy.FedAvg):
                 new_update = compute_update(new_parameter_merged, starting_point)
                 old_update = compute_update(current_global_parameter, starting_point)
                 local_update = self.latest_local_updates[k]
+                # Map client id -> int index nếu chưa có
+                for cid in [id, k]:
+                    if cid not in self.client2index:
+                        if self.num_clients >= self.relation_map.shape[0]:
+                            raise ValueError("Too many clients, relation_map full")
+                        self.client2index[cid] = self.num_clients
+                        self.num_clients += 1
+                # Lấy index int
+                i = self.client2index[id]
+                j = self.client2index[k]
+                
                 if server_round - last_round <= 1:
-                    self.relation_map[int(id)][int(k)] = (1-Alpha)*self.relation_map[int(id)][int(k)] + Alpha * get_cosine_similarity(this_update, local_update)
+                    old_value = self.relation_map[i, j]
+                    self.relation_map[i, j] = (1 - Alpha) * old_value + Alpha * get_cosine_similarity(this_update, local_update)
                 elif Decay_factor > 0.0:
                     distance1 = get_orthogonal_distance(old_update, local_update)
                     distance2 = get_orthogonal_distance(new_update, local_update)
                     new_value = max((distance1 - distance2) / (distance1 + 1e-5), -1)
-                    old_value = self.relation_map[int(id)][int(k)]
-                    if new_value >= old_value:
-                        self.consesus[int(id)][int(k)] = 1
-                    else:
-                        self.consesus[int(id)][int(k)] = -1
-                    self.relation_map[int(id)][int(k)] = (1-Alpha)*old_value + Alpha * new_value * math.pow(DECAY_FACTOR, server_round-last_round+1)
+
+                    old_value = self.relation_map[i, j]
+                    self.consesus[i, j] = 1 if new_value >= old_value else -1
+                    self.relation_map[i, j] = (1 - Alpha) * old_value + Alpha * new_value * math.pow(Decay_factor, server_round - last_round + 1)
+
+
+    # def update_relationship(self, id:str, new_parameter:List[np.ndarray], server_round, uDict=None, Alpha=0.9, Decay_factor=DECAY_FACTOR):
+    #     current_global_parameter = get_filters(self.global_model)
+    #     new_parameter_merged = new_parameter
+    #     this_update = compute_update(new_parameter_merged, current_global_parameter)
+    #     if uDict == None:
+    #         uDict = self.latest_local_updates
+    #     for k in uDict.keys():
+    #         if k != id:
+    #             starting_point = self.latest_globalparam[k]
+    #             last_round = self.get_last_update_round(k)
+    #             new_update = compute_update(new_parameter_merged, starting_point)
+    #             old_update = compute_update(current_global_parameter, starting_point)
+    #             local_update = self.latest_local_updates[k]
+    #             if server_round - last_round <= 1:
+    #                 self.relation_map[int(id)][int(k)] = (1-Alpha)*self.relation_map[int(id)][int(k)] + Alpha * get_cosine_similarity(this_update, local_update)
+    #             elif Decay_factor > 0.0:
+    #                 distance1 = get_orthogonal_distance(old_update, local_update)
+    #                 distance2 = get_orthogonal_distance(new_update, local_update)
+    #                 new_value = max((distance1 - distance2) / (distance1 + 1e-5), -1)
+    #                 old_value = self.relation_map[int(id)][int(k)]
+    #                 if new_value >= old_value:
+    #                     self.consesus[int(id)][int(k)] = 1
+    #                 else:
+    #                     self.consesus[int(id)][int(k)] = -1
+    #                 self.relation_map[int(id)][int(k)] = (1-Alpha)*old_value + Alpha * new_value * math.pow(DECAY_FACTOR, server_round-last_round+1)
 
     def update_current_relationship(self, id:str, my_parameter, results, Alpha=0.9):
         if len(results) > 1:
@@ -290,13 +329,27 @@ class FLrce_strategy(fl.server.strategy.FedAvg):
                 new_local_parameter = parameters_to_ndarrays(fitres.parameters)
                 local_update = compute_update(new_local_parameter, global_parameter)
                 new_value = get_cosine_similarity(local_update, this_update)
-                old_value = self.relation_map[int(id)][int(k)]
-                if new_value >= old_value:
-                    self.consesus[int(id)][int(k)] = 1
-                else:
-                    self.consesus[int(id)][int(k)] = -1
-                self.relation_map[int(id)][int(k)] = (1-Alpha)*old_value + Alpha*new_value
-
+                
+                # Map client id -> int index nếu chưa có
+                for cid in [id, k]:
+                    if cid not in self.client2index:
+                        self.client2index[cid] = self.num_clients
+                        self.num_clients += 1
+                # Lấy index int
+                i = self.client2index[id]
+                j = self.client2index[k]
+                
+                old_value = self.relation_map[i, j]
+                self.consesus[i, j] = 1 if new_value >= old_value else -1
+                self.relation_map[i, j] = (1 - Alpha) * old_value + Alpha * new_value
+                
+                # old_value = self.relation_map[int(id)][int(k)]
+                # if new_value >= old_value:
+                #     self.consesus[int(id)][int(k)] = 1
+                # else:
+                #     self.consesus[int(id)][int(k)] = -1
+                # self.relation_map[int(id)][int(k)] = (1-Alpha)*old_value + Alpha*new_value
+                              
     def get_highest_consensus(self) -> int:
         highest_value = -self.min_available_clients_
         for i in range(self.min_available_clients_):
