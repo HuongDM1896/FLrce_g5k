@@ -14,6 +14,7 @@ from flwr.common.logger import log
 from logging import WARNING
 from dataset import EmnistDataset
 from util import get_filters, get_parameters, set_filters, parameters_to_ndarrays
+import time
 CHANNEL = 1
 Batch = 16
 CLASSES = 62
@@ -28,6 +29,7 @@ class fedprox_strategy(fl.server.strategy.FedAvg):
         self.min_available_clients_=mac
         self.global_model = CNN(CHANNEL, outputs=CLASSES)
         self.accuracy_record = ACC
+        self.round_times ={}
 
     def record_test_accuracy(self, acc):
         self.accuracy_record.append(acc)
@@ -38,6 +40,7 @@ class fedprox_strategy(fl.server.strategy.FedAvg):
     
     """override"""
     def configure_fit(self, server_round: int, parameters, client_manager: ClientManager):
+        self.round_times[server_round] = time.time()
         random.seed(server_round)
         sample_size, min_num_clients = super().num_fit_clients(client_manager.num_available()) 
         clients = client_manager.sample(num_clients=sample_size, min_num_clients=min_num_clients)
@@ -110,7 +113,8 @@ class fedprox_strategy(fl.server.strategy.FedAvg):
             eval_metrics = [(1, res.metrics) for _, res in results]
             metrics_aggregated = self.evaluate_metrics_aggregation_fn(eval_metrics)
             self.record_test_accuracy(metrics_aggregated['accuracy'])
-            print(f"Fedprox: Round {server_round}, test accuracy = {metrics_aggregated['accuracy']}")
+            round_time = time.time() - self.round_times.pop(server_round, time.time())
+            print(f"[FedProx] Round {server_round}: accuracy = {metrics_aggregated['accuracy']:.4f}, time = {round_time:.2f}s")
         elif server_round == 1:  # Only log this warning once
             log(WARNING, "No evaluate_metrics_aggregation_fn provided")
         return loss_aggregated, metrics_aggregated
