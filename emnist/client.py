@@ -42,4 +42,6 @@ if __name__ == "__main__":
     fl.client.start_client(
             server_address=server_address,
             client=client,
+            max_retries=3,
+            max_wait_time=5
         )
