@@ -5,9 +5,12 @@ from copy import deepcopy
 import torch
 import flwr as fl
 import numpy as np
+import time
 import random
 from flwr.common import Metrics
 from flwr.common import FitIns, FitRes
+from flwr.common import Parameters, Scalar
+from typing import Tuple, Optional, Dict
 from flwr.server.client_manager import ClientManager
 from flwr.server.client_proxy import ClientProxy
 from flwr.common import ndarrays_to_parameters
@@ -47,6 +50,7 @@ class fedcom_strategy(fl.server.strategy.FedAvg):
     
     """override"""
     def configure_fit(self, server_round: int, parameters, client_manager: ClientManager):
+        self.round_start = time.time()
         random.seed(server_round)
         sample_size, min_num_clients = super().num_fit_clients(client_manager.num_available()) 
         clients = client_manager.sample(num_clients=sample_size, min_num_clients=min_num_clients)
@@ -56,13 +60,13 @@ class fedcom_strategy(fl.server.strategy.FedAvg):
             cid = client.cid
             config = {}
             # config['Residual'] = self.local_residuals[cid]
-            config['Residual'] = self.local_residuals.get(cid)  # dùng get cho client mới
+            config['Residual'] = self.local_residuals.get(cid, 0.0)  # dùng get cho client mới
             sub_parameters = get_filters(self.global_model)
             fit_ins = FitIns(ndarrays_to_parameters(sub_parameters), config)
             config_fit_list.append((client, fit_ins))
         return config_fit_list
     
-    def aggregate_fit(self, server_round: int, results: List[Tuple[ClientProxy, FitRes]], failures: List[Union[Tuple[ClientProxy, FitRes], BaseException]]):
+    def aggregate_fit(self, server_round: int, results: List[Tuple[ClientProxy, FitRes]], failures: List[Union[Tuple[ClientProxy, FitRes], BaseException]]) -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
       """override"""
       """Aggregate fit results using weighted average."""
       if not results:
@@ -76,8 +80,8 @@ class fedcom_strategy(fl.server.strategy.FedAvg):
         cid = client.cid
         param, num = parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples
         Fit_res.append((param, 1))
-        self.local_residuals[cid] = fit_res.metrics["Residual"]
-        self.local_models[cid] = fit_res.metrics["personal model"]
+        self.local_residuals[cid] = fit_res.metrics.get("Residual", 0.0)
+        # self.local_models[cid] = fit_res.metrics["personal model"]
         # self.local_residuals[int(cid)] = fit_res.metrics["Residual"]
         # self.local_models[int(cid)] = fit_res.metrics["personal model"]
       aggregated_updates = aggregate(Fit_res)
@@ -91,7 +95,8 @@ class fedcom_strategy(fl.server.strategy.FedAvg):
       elif server_round == 1:  # Only log this warning once
           log(WARNING, "No fit_metrics_aggregation_fn provided")
       set_filters(self.global_model, new_model)
-      return new_model, metrics_aggregated
+    #   return new_model, metrics_aggregated
+      return ndarrays_to_parameters(new_model), metrics_aggregated 
     
     def configure_evaluate(self, server_round: int, parameters, client_manager: ClientManager):
         """override"""
@@ -125,11 +130,13 @@ class fedcom_strategy(fl.server.strategy.FedAvg):
             ]
         )
         metrics_aggregated = {}
+        self.round_stop = time.time()
+        round_time = self.round_stop - self.round_start
         if self.evaluate_metrics_aggregation_fn:
             eval_metrics = [(1, res.metrics) for _, res in results]
             metrics_aggregated = self.evaluate_metrics_aggregation_fn(eval_metrics)
             self.record_test_accuracy(metrics_aggregated['accuracy'])
-            print(f"Fedcom: Round {server_round}, test accuracy = {metrics_aggregated['accuracy']}")
+            print(f"[FedCom]: Round {server_round}: accuracy = {metrics_aggregated['accuracy']:.4f}, start = {self.round_start}, stop = {self.round_stop}, time = {round_time:.2f}s")
         elif server_round == 1:  # Only log this warning once
             log(WARNING, "No evaluate_metrics_aggregation_fn provided")
         return loss_aggregated, metrics_aggregated

@@ -15,6 +15,7 @@ from logging import INFO
 from flwr.common.logger import log
 from flwr.server.criterion import Criterion
 import numpy as np
+import time
 
 DEVICE = torch.device("cpu") # Try "cuda" to train on GPU
 CLASSES = 62
@@ -33,6 +34,7 @@ class FLrce_client(fl.client.Client):
         self.testloader = DataLoader(ds_val, self.local_batch_size, shuffle=False)
     
     def fit(self, ins: FitIns) -> FitRes:
+        self.start = time.time()
         # Deserialize parameters to NumPy ndarray's
         params = ins.parameters
         set_filters(self.model, parameters_to_ndarrays(params))
@@ -85,6 +87,9 @@ class FLrce_client(fl.client.Client):
                 correct += predicted.eq(labels).sum()
         loss = loss / total
         accuracy = correct / total
+        self.stop = time.time()
+        round_time = self.stop - self.start
+        print(f"[FLrce]: test accuracy = {accuracy:.4f}, start = {self.start}, stop = {self.stop}, time = {round_time:.2f}s")
         return loss, accuracy
 
 class FLrce_client_manager(SimpleClientManager):

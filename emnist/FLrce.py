@@ -17,6 +17,7 @@ from logging import WARNING
 from dataset import EmnistDataset
 from es2 import get_topk_effectiveness, max_mean_dist_split
 import numpy as np
+import time
 from util import get_filters, get_orthogonal_distance, compute_update, get_relationship_update_this_round, get_parameters, set_filters, highest_consensus_this_round, get_cosine_similarity
 
 CHANNEL = 1
@@ -72,6 +73,7 @@ class FLrce_strategy(fl.server.strategy.FedAvg):
         self, server_round: int, parameters, client_manager: ClientManager
     ) -> List[Tuple[ClientProxy, FitIns]]:
         """Configure the next round of training."""
+        self.round_start = time.time()
         config = {}
         if self.on_fit_config_fn is not None:
             # Custom fit config function provided
@@ -187,11 +189,13 @@ class FLrce_strategy(fl.server.strategy.FedAvg):
             ]
         )
         metrics_aggregated = {}
+        self.round_stop = time.time()
+        round_time = self.round_stop - self.round_start
         if self.evaluate_metrics_aggregation_fn:
             eval_metrics = [(1, res.metrics) for _, res in results]
             metrics_aggregated = self.evaluate_metrics_aggregation_fn(eval_metrics)
             self.record_test_accuracy(metrics_aggregated['accuracy'])
-            print(f"Round {server_round}, Exploit = {self.is_exploit_round}, test accuracy = {metrics_aggregated['accuracy']}")
+            print(f"[FLrce]: Round {server_round}, Exploit = {self.is_exploit_round}, accuracy = {metrics_aggregated['accuracy']:.4f}, start = {self.round_start}, stop = {self.round_stop}, time = {round_time:.2f}s")
             if self.stopped:
                 if server_round == self.earlystopping_round:
                     self.earlystopping_acc = metrics_aggregated['accuracy']

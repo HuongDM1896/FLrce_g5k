@@ -27,20 +27,22 @@ if __name__ == "__main__":
         sys.exit(1)
         
     server_type = sys.argv[1]
-    FF = 0.1
-    FE = 1.0
-    MFC = 2  
-    MEC = 2
-    MAC = 2
-    ROUNDS = 3
+    FF = 0.1 #fraction_fit_
+    FE = 1 #fraction_evaluate_
+    MFC = 10 #min_fit_clients_
+    MEC = 100 #min_evaluate_clients_
+    MAC = 100 #min_available_clients_
+    ROUNDS = 50
 
     test_acc = []
     selected_clients = []
 
     if server_type == "fedcom":
         strategy = fedcom_strategy(FF, FE, MFC, MEC, MAC, ACC=test_acc, ClientsSelection=selected_clients)
+        client_manager = None
     if server_type == "fedprox":
         strategy = fedprox_strategy(FF, FE, MFC, MEC, MAC, ACC=test_acc, ClientsSelection=selected_clients)
+        client_manager = None
     if server_type == "flrce":
         consensus = []
         cu = []
@@ -48,6 +50,7 @@ if __name__ == "__main__":
         Inf = []
         earlystopping_records = []
         strategy = FLrce_strategy(FF, FE, MFC, MEC, MAC, accuracies=test_acc, ClientsSelection=selected_clients, ESCriteria=earlystopping_records)
+        client_manager = FLrce_client_manager()
     # randseed = random.randint(0, 99999)
     # random.seed(randseed)
     # Khởi động server
@@ -55,5 +58,6 @@ if __name__ == "__main__":
         server_address="0.0.0.0:8080",  # hoặc IP thật của node server
         config=fl.server.ServerConfig(num_rounds=ROUNDS),
         strategy=strategy,
-        client_manager=FLrce_client_manager()
+        client_manager=client_manager,
+        grpc_max_message_length=1024*1024*1024
     )

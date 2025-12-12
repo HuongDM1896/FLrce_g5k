@@ -5,6 +5,7 @@ from flwr.common import Code, EvaluateIns, EvaluateRes, FitRes, Status
 # other dependecies:
 from models import CNN
 import torch
+import time
 from torch.utils.data import DataLoader, random_split
 from typing import Dict
 from util import set_filters, get_filters
@@ -28,6 +29,7 @@ class fedprox_client(fl.client.Client):
         self.testloader = DataLoader(ds_val, self.local_batch_size, shuffle=False)
     
     def fit(self, ins: FitIns) -> FitRes:
+        self.start = time.time()
         # Deserialize parameters to NumPy ndarray's
         sub_params = ins.parameters
         set_filters(self.model, parameters_to_ndarrays(sub_params))
@@ -86,5 +88,8 @@ class fedprox_client(fl.client.Client):
                 correct += predicted.eq(labels).sum()
         loss = loss / total
         accuracy = correct / total
+        self.stop = time.time()
+        round_time = self.stop - self.start
+        print(f"[FedProx]: test accuracy = {accuracy:.4f}, start = {self.start}, stop = {self.stop}, time = {round_time:.2f}s")
         return loss, accuracy
     
